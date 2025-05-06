@@ -16,17 +16,11 @@ use strum::{FromRepr, VariantArray};
 use urlencoding::encode;
 
 use crate::{
-    cats, collection, cond_vec,
-    results::{ResultColumn, ResultHeader, ResultResponse, ResultRow, ResultTable},
-    sel,
-    sync::SearchQuery,
-    theme::Theme,
-    util::{
+    cats, collection, cond_vec, config::ExcludeFilter, results::{ResultColumn, ResultHeader, ResultResponse, ResultRow, ResultTable}, sel, sync::SearchQuery, theme::Theme, util::{
         colors::color_to_tui,
         conv::{shorten_number, to_bytes},
         html::{as_type, attr, inner},
-    },
-    widget::sort::{SelectedSort, SortDir},
+    }, widget::sort::{SelectedSort, SortDir}
 };
 
 use super::{
@@ -371,24 +365,27 @@ impl Source for TorrentGalaxyHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        TorrentGalaxyHtmlSource::search(client, search, config, extra).await
+        TorrentGalaxyHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn categorize(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        TorrentGalaxyHtmlSource::search(client, search, config, extra).await
+        TorrentGalaxyHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn sort(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        TorrentGalaxyHtmlSource::search(client, search, config, extra).await
+        TorrentGalaxyHtmlSource::search(client, search, config, extra, excludes).await
     }
 
     async fn search(
@@ -396,6 +393,7 @@ impl Source for TorrentGalaxyHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         _extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let tgx = config.tgx.to_owned().unwrap_or_default();
         let (base_url, url) = get_url(tgx.base_url.clone(), search)?;
@@ -547,6 +545,7 @@ impl Source for TorrentGalaxyHtmlSource {
                     "imdb".to_owned() => imdb.to_owned(),
                 ];
 
+                let title = attr(e, title_sel, "title");
                 Some(Item {
                     id,
                     date,
@@ -555,7 +554,7 @@ impl Source for TorrentGalaxyHtmlSource {
                     downloads: views,
                     bytes: to_bytes(&size),
                     size,
-                    title: attr(e, title_sel, "title"),
+                    title: title.clone(),
                     torrent_link,
                     magnet_link,
                     post_link,
@@ -564,6 +563,7 @@ impl Source for TorrentGalaxyHtmlSource {
                     icon,
                     item_type,
                     extra,
+                    hidden: ExcludeFilter::should_hide(title, excludes),
                 })
             })
             .collect::<Vec<Item>>();
@@ -598,6 +598,7 @@ impl Source for TorrentGalaxyHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let tgx = config.tgx.to_owned().unwrap_or_default();
         let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
@@ -648,7 +649,7 @@ impl Source for TorrentGalaxyHtmlSource {
             .into());
         }
 
-        TorrentGalaxyHtmlSource::search(client, search, config, extra).await
+        TorrentGalaxyHtmlSource::search(client, search, config, extra, excludes).await
     }
 
     fn info() -> SourceInfo {

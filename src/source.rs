@@ -9,7 +9,7 @@ use torrent_galaxy::TgxTheme;
 
 use crate::{
     app::{Context, LoadType, Widgets},
-    config::Config,
+    config::{Config, ExcludeFilter},
     results::{ResultResponse, ResultTable, Results},
     sync::SearchQuery,
     theme::Theme,
@@ -171,6 +171,7 @@ pub struct Item {
     pub icon: CatIcon,
     pub item_type: ItemType,
     pub extra: HashMap<String, String>,
+    pub hidden: bool,
 }
 
 #[derive(Serialize, Deserialize, Display, Clone, Copy, VariantArray, PartialEq, Eq)]
@@ -189,24 +190,28 @@ pub trait Source {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> impl std::future::Future<Output = Result<SourceResponse, Box<dyn Error + Send + Sync>>> + Send;
     fn sort(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> impl std::future::Future<Output = Result<SourceResponse, Box<dyn Error + Send + Sync>>> + Send;
     fn filter(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> impl std::future::Future<Output = Result<SourceResponse, Box<dyn Error + Send + Sync>>> + Send;
     fn categorize(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> impl std::future::Future<Output = Result<SourceResponse, Box<dyn Error + Send + Sync>>> + Send;
     fn solve(
         solution: String,
@@ -214,6 +219,7 @@ pub trait Source {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> impl std::future::Future<Output = Result<SourceResponse, Box<dyn Error + Send + Sync>>> + Send;
     fn info() -> SourceInfo;
     fn load_config(config: &mut SourceConfig);
@@ -239,53 +245,54 @@ impl Sources {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Sources::Nyaa => match load_type {
                 LoadType::Searching | LoadType::Sourcing => {
-                    NyaaHtmlSource::search(client, search, config, extra).await
+                    NyaaHtmlSource::search(client, search, config, extra, excludes).await
                 }
-                LoadType::Sorting => NyaaHtmlSource::sort(client, search, config, extra).await,
-                LoadType::Filtering => NyaaHtmlSource::filter(client, search, config, extra).await,
+                LoadType::Sorting => NyaaHtmlSource::sort(client, search, config, extra, excludes).await,
+                LoadType::Filtering => NyaaHtmlSource::filter(client, search, config, extra, excludes).await,
                 LoadType::Categorizing => {
-                    NyaaHtmlSource::categorize(client, search, config, extra).await
+                    NyaaHtmlSource::categorize(client, search, config, extra, excludes).await
                 }
                 LoadType::SolvingCaptcha(solution) => {
-                    NyaaHtmlSource::solve(solution, client, search, config, extra).await
+                    NyaaHtmlSource::solve(solution, client, search, config, extra, excludes).await
                 }
                 LoadType::Downloading | LoadType::Batching => unreachable!(),
             },
             Sources::SukebeiNyaa => match load_type {
                 LoadType::Searching | LoadType::Sourcing => {
-                    SukebeiHtmlSource::search(client, search, config, extra).await
+                    SukebeiHtmlSource::search(client, search, config, extra, excludes).await
                 }
-                LoadType::Sorting => SukebeiHtmlSource::sort(client, search, config, extra).await,
+                LoadType::Sorting => SukebeiHtmlSource::sort(client, search, config, extra, excludes).await,
                 LoadType::Filtering => {
-                    SukebeiHtmlSource::filter(client, search, config, extra).await
+                    SukebeiHtmlSource::filter(client, search, config, extra, excludes).await
                 }
                 LoadType::Categorizing => {
-                    SukebeiHtmlSource::categorize(client, search, config, extra).await
+                    SukebeiHtmlSource::categorize(client, search, config, extra, excludes).await
                 }
                 LoadType::SolvingCaptcha(solution) => {
-                    SukebeiHtmlSource::solve(solution, client, search, config, extra).await
+                    SukebeiHtmlSource::solve(solution, client, search, config, extra, excludes).await
                 }
                 LoadType::Downloading | LoadType::Batching => unreachable!(),
             },
             Sources::TorrentGalaxy => match load_type {
                 LoadType::Searching | LoadType::Sourcing => {
-                    TorrentGalaxyHtmlSource::search(client, search, config, extra).await
+                    TorrentGalaxyHtmlSource::search(client, search, config, extra, excludes).await
                 }
                 LoadType::Sorting => {
-                    TorrentGalaxyHtmlSource::sort(client, search, config, extra).await
+                    TorrentGalaxyHtmlSource::sort(client, search, config, extra, excludes).await
                 }
                 LoadType::Filtering => {
-                    TorrentGalaxyHtmlSource::filter(client, search, config, extra).await
+                    TorrentGalaxyHtmlSource::filter(client, search, config, extra, excludes).await
                 }
                 LoadType::Categorizing => {
-                    TorrentGalaxyHtmlSource::categorize(client, search, config, extra).await
+                    TorrentGalaxyHtmlSource::categorize(client, search, config, extra, excludes).await
                 }
                 LoadType::SolvingCaptcha(solution) => {
-                    TorrentGalaxyHtmlSource::solve(solution, client, search, config, extra).await
+                    TorrentGalaxyHtmlSource::solve(solution, client, search, config, extra, excludes).await
                 }
                 LoadType::Downloading | LoadType::Batching => unreachable!(),
             },

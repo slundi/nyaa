@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use strum::VariantArray as _;
 use urlencoding::encode;
 
+use crate::config::ExcludeFilter;
 use crate::{
     cats,
     results::ResultResponse,
@@ -110,26 +111,29 @@ impl Source for SukebeiHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        SukebeiHtmlSource::search(client, search, config, extra).await
+        SukebeiHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn categorize(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        SukebeiHtmlSource::search(client, search, config, extra).await
+        SukebeiHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn sort(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let sukebei = config.sukebei.to_owned().unwrap_or_default();
         let sort = search.sort;
-        let mut res = SukebeiHtmlSource::search(client, search, config, extra).await;
+        let mut res = SukebeiHtmlSource::search(client, search, config, extra, excludes).await;
 
         if sukebei.rss {
             if let Ok(SourceResponse::Results(res)) = &mut res {
@@ -144,6 +148,7 @@ impl Source for SukebeiHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let sukebei = config.sukebei.to_owned().unwrap_or_default();
         if sukebei.rss {
@@ -153,6 +158,7 @@ impl Source for SukebeiHtmlSource {
                 client,
                 search,
                 extra,
+                excludes,
             )
             .await;
         }
@@ -270,6 +276,7 @@ impl Source for SukebeiHtmlSource {
                     _ => ItemType::None,
                 };
 
+                let title = attr(e, title_sel, "title");
                 Some(Item {
                     id,
                     date,
@@ -278,7 +285,7 @@ impl Source for SukebeiHtmlSource {
                     downloads,
                     size,
                     bytes,
-                    title: attr(e, title_sel, "title"),
+                    title: title.clone(),
                     torrent_link,
                     magnet_link: attr(e, magnet_sel, "href"),
                     post_link,
@@ -286,6 +293,7 @@ impl Source for SukebeiHtmlSource {
                     category,
                     icon,
                     item_type,
+                    hidden: ExcludeFilter::should_hide(title, excludes),
                     ..Default::default()
                 })
             })
@@ -311,8 +319,9 @@ impl Source for SukebeiHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        SukebeiHtmlSource::search(client, search, config, extra).await
+        SukebeiHtmlSource::search(client, search, config, extra, excludes).await
     }
 
     fn info() -> SourceInfo {

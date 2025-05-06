@@ -15,6 +15,7 @@ use crate::{
     widget::notifications::NotificationConfig,
 };
 use directories::ProjectDirs;
+use regex::{Regex, RegexBuilder};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub static CONFIG_FILE: &str = "config.toml";
@@ -44,6 +45,80 @@ impl AppConfig {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
+pub struct ExcludeFilter {
+    pub use_regex: bool,
+    pub case_insensitive: bool,
+    pub expression: String,
+}
+
+impl Default for ExcludeFilter {
+    fn default() -> Self {
+        Self {
+            use_regex: false,
+            case_insensitive: true,
+            expression: Default::default(),
+        }
+    }
+}
+
+impl ExcludeFilter {
+    /// Checks if a given name should be hidden based on a list of exclude filters.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to check.
+    /// * `excludes` - A slice of `ExcludeFilter`s to apply.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the name should be hidden, `false` otherwise.
+    pub fn should_hide(name: String, excludes: &[ExcludeFilter]) -> bool {
+        for filter in excludes {
+            // Handle case insensitivity.  We create a temporary string for comparison.
+            let name_to_check = if filter.case_insensitive {
+                name.to_lowercase()
+            } else {
+                name.clone()
+            };
+
+            if filter.use_regex {
+                // Use regex for matching.
+                let regex_result = Regex::new(&filter.expression).and_then(|re| {
+                    if filter.case_insensitive {
+                        RegexBuilder::new(&filter.expression)
+                            .case_insensitive(true)
+                            .build()
+                    } else {
+                        Ok(re)
+                    }
+                });
+                match regex_result {
+                    Ok(re) => {
+                        if re.is_match(&name_to_check) {
+                            return true; // Found a match, hide the name.
+                        }
+                    }
+                    Err(e) => {
+                        // Log the error, and consider it a non-match.  In a real application, you might
+                        // want to handle this more robustly (e.g., return an error, skip the filter, etc.).
+                        eprintln!("Error compiling regex: {}", e);
+                        // Important:  We continue to the next filter if there's an error.
+                    }
+                }
+            } else {
+                // Use simple string matching.
+                if name_to_check == filter.expression {
+                    return true; // Found a match, hide the name.
+                }
+            }
+        }
+
+        false // No matches found, do not hide the name.
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Config {
     #[serde(alias = "default_theme")]
     pub theme: String,
@@ -68,6 +143,8 @@ pub struct Config {
     pub client: ClientConfig,
     #[serde(rename = "source")]
     pub sources: SourceConfig,
+
+    pub excludes: Vec<ExcludeFilter>,
 }
 
 impl Default for Config {
@@ -90,6 +167,7 @@ impl Default for Config {
             clipboard: None,
             client: ClientConfig::default(),
             sources: SourceConfig::default(),
+            excludes: Vec::default(),
         }
     }
 }
@@ -220,4 +298,105 @@ pub fn get_configuration_folder(app_name: &str) -> Result<PathBuf, Box<dyn Error
         .ok_or(format!("{path:?} is not valid Unicode"))?;
 
     Ok(config_dir_str.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_hide_no_filters() {
+        let excludes = vec![];
+        assert_eq!(ExcludeFilter::should_hide("test".to_string(), &excludes), false);
+        assert_eq!(ExcludeFilter::should_hide("".to_string(), &excludes), false);
+    }
+
+    #[test]
+    fn test_should_hide_string_match() {
+        let excludes = vec![ExcludeFilter {
+            use_regex: false,
+            case_insensitive: false,
+            expression: "exact_match".to_string(),
+        }];
+        assert_eq!(ExcludeFilter::should_hide("exact_match".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("Exact_Match".to_string(), &excludes), false); // Case-sensitive
+        assert_eq!(ExcludeFilter::should_hide("partial_match".to_string(), &excludes), false);
+    }
+
+    #[test]
+    fn test_should_hide_string_match_case_insensitive() {
+        let excludes = vec![ExcludeFilter {
+            use_regex: false,
+            case_insensitive: true,
+            expression: "case_insensitive".to_string(),
+        }];
+        assert_eq!(ExcludeFilter::should_hide("case_insensitive".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("Case_InSensitive".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("CASE_INSENSITIVE".to_string(), &excludes), true);
+    }
+
+    #[test]
+    fn test_should_hide_regex_match() {
+        let excludes = vec![ExcludeFilter {
+            use_regex: true,
+            case_insensitive: false,
+            expression: "^regex.*".to_string(), // Starts with "regex"
+        }];
+        assert_eq!(ExcludeFilter::should_hide("regex_match".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("Regex_Match".to_string(), &excludes), false); // Case-sensitive
+        assert_eq!(
+            ExcludeFilter::should_hide("not_a_regex_match".to_string(), &excludes),
+            false
+        );
+    }
+
+    #[test]
+    fn test_should_hide_regex_match_case_insensitive() {
+        let excludes = vec![ExcludeFilter {
+            use_regex: true,
+            case_insensitive: true,
+            expression: ".*insensitive.*".to_string(), // Contains "insensitive"
+        }];
+        assert_eq!(ExcludeFilter::should_hide("case_insensitive".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("Case_InSensitive".to_string(), &excludes), true);
+        assert_eq!(
+            ExcludeFilter::should_hide("SomeRandomStringWithInsensitiveInIt".to_string(), &excludes),
+            true
+        );
+        assert_eq!(
+            ExcludeFilter::should_hide("totally_different".to_string(), &excludes),
+            false
+        );
+    }
+
+    #[test]
+    fn test_should_hide_multiple_filters() {
+        let excludes = vec![
+            ExcludeFilter {
+                use_regex: false,
+                case_insensitive: true,
+                expression: "exact".to_string(),
+            },
+            ExcludeFilter {
+                use_regex: true,
+                case_insensitive: false,
+                expression: ".*suffix$".to_string(), // Ends with "suffix"
+            },
+        ];
+        assert_eq!(ExcludeFilter::should_hide("exact".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("EXACT".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("some_suffix".to_string(), &excludes), true);
+        assert_eq!(ExcludeFilter::should_hide("Some_Suffix".to_string(), &excludes), false); // Case sensitive regex
+        assert_eq!(ExcludeFilter::should_hide("different".to_string(), &excludes), false);
+    }
+
+    #[test]
+    fn test_should_hide_empty_expression() {
+        let excludes = vec![ExcludeFilter {
+            use_regex: true,
+            case_insensitive: true,
+            expression: "".to_string(),
+        }];
+        assert_eq!(ExcludeFilter::should_hide("any".to_string(), &excludes), true); // Empty regex matches anything
+    }
 }

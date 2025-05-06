@@ -160,6 +160,9 @@ save_config_on_change = true     # save config when changing sources/themes
 # ...
 
 # ...
+
+[excludes]
+# ...
 ```
 
 `theme` refers to the theme selected by default when the app is opened. Possible values are `Default`, `Dracula`, `Gruvbox`, or `Catppuccin Macchiato`. You can also use custom [user-defined themes](https://github.com/Beastwick18/nyaa/wiki/User%E2%80%90defined-Themes).

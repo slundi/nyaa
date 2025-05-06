@@ -6,6 +6,7 @@ use reqwest::StatusCode;
 use rss::{extension::Extension, Channel};
 use urlencoding::encode;
 
+use crate::config::ExcludeFilter;
 use crate::{
     results::ResultResponse,
     sync::SearchQuery,
@@ -48,6 +49,7 @@ pub async fn search_rss<S: Source>(
     client: &reqwest::Client,
     search: &SearchQuery,
     extra: &SourceExtraConfig,
+    excludes: &[ExcludeFilter],
 ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
     let query = search.query.to_owned();
     let cat = search.category;
@@ -125,6 +127,7 @@ pub async fn search_rss<S: Source>(
                 newstr
             };
 
+            let title = item.title().unwrap_or("???").to_owned();
             Some(Item {
                 id: format!("nyaa-{}", id_usize),
                 date,
@@ -133,7 +136,7 @@ pub async fn search_rss<S: Source>(
                 downloads: get_ext_value(ext, "downloads"),
                 bytes: to_bytes(&size),
                 size,
-                title: item.title().unwrap_or("???").to_owned(),
+                title: title.clone(),
                 torrent_link,
                 magnet_link: item.link().unwrap_or("???").to_owned(),
                 post_link: post,
@@ -141,6 +144,7 @@ pub async fn search_rss<S: Source>(
                 item_type,
                 category,
                 icon,
+                hidden: ExcludeFilter::should_hide(title, excludes),
                 ..Default::default()
             })
         })

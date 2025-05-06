@@ -100,7 +100,7 @@ impl EventSync for AppSync {
         theme: Theme,
         extra: SourceExtraConfig,
     ) {
-        let res = src.load(load_type, &client, &search, &config, &extra).await;
+        let res = src.load(load_type, &client, &search, &config, &extra, &excludes).await;
         let fmt = match res {
             Ok(SourceResponse::Results(res)) => Ok(SourceResults::Results(Results::new(
                 search.clone(),

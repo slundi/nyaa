@@ -15,6 +15,7 @@ use urlencoding::encode;
 use crate::util;
 use crate::{
     cats, cond_vec,
+    config::ExcludeFilter,
     results::{ResultColumn, ResultHeader, ResultResponse, ResultRow, ResultTable},
     sel,
     sync::SearchQuery,
@@ -277,6 +278,7 @@ impl Source for NyaaHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let nyaa = config.nyaa.to_owned().unwrap_or_default();
         if nyaa.rss {
@@ -286,6 +288,7 @@ impl Source for NyaaHtmlSource {
                 client,
                 search,
                 extra,
+                excludes,
             )
             .await;
         }
@@ -412,6 +415,7 @@ impl Source for NyaaHtmlSource {
                     _ => ItemType::None,
                 };
 
+                let title = attr(e, title_sel, "title");
                 Some(Item {
                     id,
                     date,
@@ -420,7 +424,7 @@ impl Source for NyaaHtmlSource {
                     downloads,
                     size,
                     bytes,
-                    title: attr(e, title_sel, "title"),
+                    title: title.clone(),
                     torrent_link,
                     magnet_link: attr(e, magnet_sel, "href"),
                     post_link,
@@ -428,6 +432,7 @@ impl Source for NyaaHtmlSource {
                     category,
                     icon,
                     item_type,
+                    hidden: ExcludeFilter::should_hide(title, excludes),
                     ..Default::default()
                 })
             })
@@ -444,10 +449,11 @@ impl Source for NyaaHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
         let nyaa = config.nyaa.to_owned().unwrap_or_default();
         let sort = search.sort;
-        let mut res = NyaaHtmlSource::search(client, search, config, extra).await;
+        let mut res = NyaaHtmlSource::search(client, search, config, extra, excludes).await;
 
         if nyaa.rss {
             if let Ok(SourceResponse::Results(res)) = &mut res {
@@ -461,16 +467,18 @@ impl Source for NyaaHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        NyaaHtmlSource::search(client, search, config, extra).await
+        NyaaHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn categorize(
         client: &reqwest::Client,
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        NyaaHtmlSource::search(client, search, config, extra).await
+        NyaaHtmlSource::search(client, search, config, extra, excludes).await
     }
     async fn solve(
         _solution: String,
@@ -478,8 +486,9 @@ impl Source for NyaaHtmlSource {
         search: &SearchQuery,
         config: &SourceConfig,
         extra: &SourceExtraConfig,
+        excludes: &[ExcludeFilter],
     ) -> Result<SourceResponse, Box<dyn Error + Send + Sync>> {
-        NyaaHtmlSource::search(client, search, config, extra).await
+        NyaaHtmlSource::search(client, search, config, extra, excludes).await
     }
 
     fn info() -> SourceInfo {
